@@ -27,7 +27,6 @@ jobs:
         run: |
           OWNER_LC=$(echo ${{ gitea.repository_owner }} | tr '[:upper:]' '[:lower:]')
           REPO_FULL_PATH="${{ env.REGISTRY }}/$OWNER_LC/${{ env.IMAGE_NAME }}"
-          # Tagueamos con :latest y con el SHA para tener historial de versiones
           docker build -t $REPO_FULL_PATH:latest -t $REPO_FULL_PATH:${{ gitea.sha }} .
           docker push $REPO_FULL_PATH --all-tags
 
@@ -35,7 +34,6 @@ jobs:
         run: |
           sudo mkdir -p ${{ env.DEPLOY_PATH }}
           sudo chown $USER:$USER ${{ env.DEPLOY_PATH }}
-          
           OWNER_LC=$(echo ${{ gitea.repository_owner }} | tr '[:upper:]' '[:lower:]')
           
           sudo tee ${{ env.DEPLOY_PATH }}/docker-compose.yml > /dev/null <<EOF
@@ -52,6 +50,8 @@ jobs:
                 - SPRING_DATASOURCE_USERNAME=${{ secrets.DB_USER }}
                 - SPRING_DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }}
                 - SPRING_PROFILES_ACTIVE=prod
+                - TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_TOKEN }}
+                - TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
               labels:
                 - "traefik.enable=true"
                 - "traefik.http.routers.${{ env.IMAGE_NAME }}.rule=Host(\`${{ secrets.DOMAIN_URL }}\`)"
@@ -74,7 +74,8 @@ jobs:
       - name: Sync Mirror a GitHub
         if: success()
         run: |
-          REMOTE_REPO="https://${{ secrets.GIT_HUB_USER }}:${{ secrets.GIT_HUB_SYNC_TOKEN }}@github.com/${{ secrets.GIT_HUB_USER }}/${{ secrets.GIT_HUB_REPO_NAME }}.git"
+          # REVISA ESTOS NOMBRES EN TUS SECRETOS DE GITEA
+          REMOTE_REPO="https://${{ secrets.GITHUB_USER }}:${{ secrets.GITHUB_SYNC_TOKEN }}@github.com/${{ secrets.GITHUB_USER }}/${{ secrets.GITHUB_REPO_NAME }}.git"
           git push --force "$REMOTE_REPO" main
 
       - name: Notificar Éxito a Telegram
@@ -82,11 +83,11 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
           -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-          -d text="✅ DEPLOY EXITOSO: ${{ env.IMAGE_NAME }} está online en https://${{ secrets.DOMAIN_URL }} (Mirror sincronizado en GitHub)"
+          -d text="✅ DEPLOY EXITOSO: ${{ env.IMAGE_NAME }} online en https://${{ secrets.DOMAIN_URL }}"
 
       - name: Notificar Error a Telegram
         if: failure()
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
           -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-          -d text="❌ ERROR EN DEPLOY: El pipeline de ${{ env.IMAGE_NAME }} ha fallado. Revisa los logs en tu Gitea."
+          -d text="❌ ERROR EN DEPLOY: ${{ env.IMAGE_NAME }} falló. Revisa logs."
