@@ -73,12 +73,19 @@ jobs:
 
       - name: Sync Mirror a GitHub
         if: success()
+        env:
+          GH_USER: ${{ secrets.GIT_HUB_USER }}
+          GH_REPO: ${{ secrets.GIT_HUB_REPO_NAME }}
+          GH_TOKEN: ${{ secrets.GIT_HUB_SYNC_TOKEN }}
         run: |
-          # Construimos la URL usando tus secretos con guion bajo
-          # IMPORTANTE: No debe haber espacios en esta cadena
-          REMOTE_URL="https://${{ secrets.GIT_HUB_USER }}:${{ secrets.GIT_HUB_SYNC_TOKEN }}@github.com/${{ secrets.GIT_HUB_USER }}/${{ secrets.GIT_HUB_REPO_NAME }}.git"
+          # Ahora usamos las variables locales del paso para asegurar que se inyectan
+          REMOTE_URL="https://${GH_USER}:${GH_TOKEN}@github.com/${GH_USER}/${GH_REPO}.git"
           
-          # Forzamos el push a la rama main de GitHub
+          # Configuramos el usuario para evitar errores de autoría
+          git config --global user.email "victor@victorponce.dev"
+          git config --global user.name "Victor Ponce"
+          
+          # Hacemos el push
           git push --force "$REMOTE_URL" main:main
 
       - name: Notificar Éxito a Telegram
