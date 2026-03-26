@@ -75,7 +75,7 @@ jobs:
         if: success()
         run: |
           # REVISA ESTOS NOMBRES EN TUS SECRETOS DE GITEA
-          REMOTE_REPO="https://${{ secrets.GITHUB_USER }}:${{ secrets.GITHUB_SYNC_TOKEN }}@github.com/${{ secrets.GITHUB_USER }}/${{ secrets.GITHUB_REPO_NAME }}.git"
+          REMOTE_REPO="https://${{ secrets.GIT_HUB_USER }}:${{ secrets.GIT_HUB_SYNC_TOKEN }}@github.com/${{ secrets.GIT_HUB_USER }}/${{ secrets.GIT_HUB_REPO_NAME }}.git"
           git push --force "$REMOTE_REPO" main
 
       - name: Notificar Éxito a Telegram
