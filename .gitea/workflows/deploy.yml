@@ -32,10 +32,13 @@ jobs:
 
       - name: Generar Docker-Compose y Desplegar
         run: |
+          # 1. Crear directorio y asegurar que el usuario del runner pueda escribir
           sudo mkdir -p ${{ env.DEPLOY_PATH }}
-          sudo chown $USER:$USER ${{ env.DEPLOY_PATH }}
+          sudo chmod 777 ${{ env.DEPLOY_PATH }}
+          
           OWNER_LC=$(echo ${{ gitea.repository_owner }} | tr '[:upper:]' '[:lower:]')
           
+          # 2. Generar el docker-compose.yml
           sudo tee ${{ env.DEPLOY_PATH }}/docker-compose.yml > /dev/null <<EOF
           services:
             ${{ env.IMAGE_NAME }}:
@@ -66,19 +69,19 @@ jobs:
               external: true
           EOF
 
+          # 3. Despliegue
           cd ${{ env.DEPLOY_PATH }}
           sudo docker compose pull
           sudo docker compose up -d --remove-orphans
+          
+          # Limpiar imágenes antiguas pero manteniendo la actual
           sudo docker image prune -f
 
       - name: Sync Mirror a GitHub
         if: success()
         run: |
-          # Construimos la URL usando tus secretos con guion bajo
-          # IMPORTANTE: No debe haber espacios en esta cadena
+          # Usamos los secretos de GitHub para la sincronización
           REMOTE_URL="https://${{ secrets.GIT_HUB_USER }}:${{ secrets.GIT_HUB_SYNC_TOKEN }}@github.com/${{ secrets.GIT_HUB_USER }}/${{ secrets.GIT_HUB_REPO_NAME }}.git"
-          
-          # Forzamos el push a la rama main de GitHub
           git push --force "$REMOTE_URL" main:main
 
       - name: Notificar Éxito a Telegram
@@ -86,11 +89,11 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
           -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-          -d text="✅ DEPLOY EXITOSO: ${{ env.IMAGE_NAME }} online en https://${{ secrets.DOMAIN_URL }}"
+          -d text="✅ DEPLOY EXITOSO%0A🚀 Proyecto: ${{ env.IMAGE_NAME }}%0A🌐 URL: https://${{ secrets.DOMAIN_URL }}%0A📦 Mirror: GitHub Sync OK"
 
       - name: Notificar Error a Telegram
         if: failure()
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
           -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-          -d text="❌ ERROR EN DEPLOY: ${{ env.IMAGE_NAME }} falló. Revisa logs."
+          -d text="❌ ERROR EN DEPLOY%0A⚠️ Proyecto: ${{ env.IMAGE_NAME }}%0A🔍 Revisa los logs en Gitea."
