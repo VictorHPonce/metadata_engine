@@ -1,0 +1,36 @@
+### Gradle / Java ###
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+### IDEs (IntelliJ, VS Code, STS) ###
+.idea/
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+*.iws
+*.iml
+*.ipr
+bin/
+out/
+
+### Configuración y Secretos (NUNCA SUBIR) ###
+.env
+.env.local
+.env.production
+.env.backup
+# Bloqueamos perfiles específicos que suelen tener IPs o claves reales
+application-local.yml
+application-prod.yml
+application-dev.yml
+
+### Spring Config Base (PERMITIDO) ###
+# Subimos el archivo base para que el proyecto tenga estructura al clonarse
+!application.yml
+# Pero nos aseguramos de no subir el properties viejo si aún existe
+application.properties
+
+### Documentación ###
+HELP.md

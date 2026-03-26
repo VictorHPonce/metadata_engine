@@ -1,0 +1,92 @@
+name: CI/CD Engine & Mirroring
+run-name: ${{ gitea.actor }} - Desplegando ${{ secrets.IMAGE_NAME }}
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  REGISTRY: ${{ secrets.REGISTRY_URL }}
+  IMAGE_NAME: ${{ secrets.IMAGE_NAME }}
+  DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      - name: Login al Registry
+        run: |
+          echo "${{ secrets.DEPLOY_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ secrets.REGISTRY_USER }} --password-stdin
+
+      - name: Construir y Push de Imagen
+        run: |
+          OWNER_LC=$(echo ${{ gitea.repository_owner }} | tr '[:upper:]' '[:lower:]')
+          REPO_FULL_PATH="${{ env.REGISTRY }}/$OWNER_LC/${{ env.IMAGE_NAME }}"
+          # Tagueamos con :latest y con el SHA para tener historial de versiones
+          docker build -t $REPO_FULL_PATH:latest -t $REPO_FULL_PATH:${{ gitea.sha }} .
+          docker push $REPO_FULL_PATH --all-tags
+
+      - name: Generar Docker-Compose y Desplegar
+        run: |
+          sudo mkdir -p ${{ env.DEPLOY_PATH }}
+          sudo chown $USER:$USER ${{ env.DEPLOY_PATH }}
+          
+          OWNER_LC=$(echo ${{ gitea.repository_owner }} | tr '[:upper:]' '[:lower:]')
+          
+          sudo tee ${{ env.DEPLOY_PATH }}/docker-compose.yml > /dev/null <<EOF
+          services:
+            ${{ env.IMAGE_NAME }}:
+              image: ${{ env.REGISTRY }}/$OWNER_LC/${{ env.IMAGE_NAME }}:latest
+              container_name: ${{ env.IMAGE_NAME }}
+              restart: always
+              networks:
+                - web
+                - internal
+              environment:
+                - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${{ secrets.DB_NAME }}
+                - SPRING_DATASOURCE_USERNAME=${{ secrets.DB_USER }}
+                - SPRING_DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }}
+                - SPRING_PROFILES_ACTIVE=prod
+              labels:
+                - "traefik.enable=true"
+                - "traefik.http.routers.${{ env.IMAGE_NAME }}.rule=Host(\`${{ secrets.DOMAIN_URL }}\`)"
+                - "traefik.http.routers.${{ env.IMAGE_NAME }}.entrypoints=websecure"
+                - "traefik.http.routers.${{ env.IMAGE_NAME }}.tls.certresolver=letsencrypt"
+                - "traefik.http.services.${{ env.IMAGE_NAME }}.loadbalancer.server.port=8080"
+                - "traefik.docker.network=web"
+          networks:
+            web:
+              external: true
+            internal:
+              external: true
+          EOF
+
+          cd ${{ env.DEPLOY_PATH }}
+          sudo docker compose pull
+          sudo docker compose up -d --remove-orphans
+          sudo docker image prune -f
+
+      - name: Sync Mirror a GitHub
+        if: success()
+        run: |
+          REMOTE_REPO="https://${{ secrets.GIT_HUB_USER }}:${{ secrets.GIT_HUB_SYNC_TOKEN }}@github.com/${{ secrets.GIT_HUB_USER }}/${{ secrets.GIT_HUB_REPO_NAME }}.git"
+          git push --force "$REMOTE_REPO" main
+
+      - name: Notificar Éxito a Telegram
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+          -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+          -d text="✅ DEPLOY EXITOSO: ${{ env.IMAGE_NAME }} está online en https://${{ secrets.DOMAIN_URL }} (Mirror sincronizado en GitHub)"
+
+      - name: Notificar Error a Telegram
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+          -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+          -d text="❌ ERROR EN DEPLOY: El pipeline de ${{ env.IMAGE_NAME }} ha fallado. Revisa los logs en tu Gitea."
