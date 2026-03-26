@@ -74,9 +74,12 @@ jobs:
       - name: Sync Mirror a GitHub
         if: success()
         run: |
-          # REVISA ESTOS NOMBRES EN TUS SECRETOS DE GITEA
-          REMOTE_REPO="https://${{ secrets.GIT_HUB_USER }}:${{ secrets.GIT_HUB_SYNC_TOKEN }}@github.com/${{ secrets.GIT_HUB_USER }}/${{ secrets.GIT_HUB_REPO_NAME }}.git"
-          git push --force "$REMOTE_REPO" main
+          # Construimos la URL usando tus secretos con guion bajo
+          # IMPORTANTE: No debe haber espacios en esta cadena
+          REMOTE_URL="https://${{ secrets.GIT_HUB_USER }}:${{ secrets.GIT_HUB_SYNC_TOKEN }}@github.com/${{ secrets.GIT_HUB_USER }}/${{ secrets.GIT_HUB_REPO_NAME }}.git"
+          
+          # Forzamos el push a la rama main de GitHub
+          git push --force "$REMOTE_URL" main:main
 
       - name: Notificar Éxito a Telegram
         if: success()
